@@ -1,0 +1,92 @@
+{
+  "name": "BookingNavigationIntent",
+  "identifier": "QM7JOKWWZH",
+  "description": null,
+  "parentIntentSignature": null,
+  "sampleUtterances": [
+    { "utterance": "How do I make a booking?" },
+    { "utterance": "I want to reserve a room." },
+    { "utterance": "Help with booking." },
+    { "utterance": "Book a room for me." },
+    { "utterance": "How can I schedule an appointment?" },
+    { "utterance": "I need to make a reservation." }
+  ],
+  "intentConfirmationSetting": null,
+  "intentClosingSetting": null,
+  "initialResponseSetting": {
+    "conditional": null,
+    "codeHook": {
+      "isActive": true,
+      "invocationLabel": null,
+      "postCodeHookSpecification": {
+        "failureResponse": null,
+        "failureNextStep": {
+          "sessionAttributes": null,
+          "dialogAction": {
+            "type": "EndConversation",
+            "slotToElicit": null,
+            "suppressNextMessage": null
+          },
+          "intent": { "name": null, "slots": null }
+        },
+        "failureConditional": null,
+        "successResponse": null,
+        "successNextStep": {
+          "sessionAttributes": null,
+          "dialogAction": {
+            "type": "EndConversation",
+            "slotToElicit": null,
+            "suppressNextMessage": null
+          },
+          "intent": { "name": null, "slots": null }
+        },
+        "successConditional": null,
+        "timeoutResponse": null,
+        "timeoutNextStep": {
+          "sessionAttributes": null,
+          "dialogAction": {
+            "type": "EndConversation",
+            "slotToElicit": null,
+            "suppressNextMessage": null
+          },
+          "intent": { "name": null, "slots": null }
+        },
+        "timeoutConditional": null
+      },
+      "enableCodeHookInvocation": true
+    },
+    "nextStep": {
+      "sessionAttributes": null,
+      "dialogAction": {
+        "type": "InvokeDialogCodeHook",
+        "slotToElicit": null,
+        "suppressNextMessage": null
+      },
+      "intent": { "name": null, "slots": null }
+    },
+    "initialResponse": {
+      "messageGroupsList": [
+        {
+          "message": {
+            "ssmlMessage": null,
+            "customPayload": null,
+            "plainTextMessage": {
+              "value": "You can reserve a room by selecting the 'Book Now' option on our website. Choose your check-in and check-out dates to proceed with the booking"
+            },
+            "imageResponseCard": null
+          },
+          "variations": null
+        }
+      ],
+      "allowInterrupt": true
+    }
+  },
+  "inputContexts": null,
+  "outputContexts": null,
+  "kendraConfiguration": null,
+  "qnAIntentConfiguration": null,
+  "bedrockAgentIntentConfiguration": null,
+  "dialogCodeHook": null,
+  "fulfillmentCodeHook": null,
+  "slotPriorities": []
+}

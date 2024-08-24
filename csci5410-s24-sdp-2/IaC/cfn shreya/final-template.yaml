@@ -1,0 +1,422 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+# ------------- GetAllUsers Lambda -----------------
+    GetAllUsersLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "getAllUsers-CFN"
+            Handler: "lambda_function.lambda_handler" # Lambda Function Handler
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "getAllUsers.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    GetAllUsersLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Authorization
+                - Content-Type
+              AllowMethods: 
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt GetAllUsersLambda.Arn
+    GetAllUsersLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref GetAllUsersLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# ------------ VERIFY USER LAMBDA FUNCTION -----------------
+    VerifyUserLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "verifyUser-CFN"
+            Handler: "verifyUser.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "verifyUser.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            Environment:
+                Variables:
+                    USERPOOL_ID: !Ref CognitoUserPool 
+            EphemeralStorage: 
+                Size: 512
+    VerifyUserLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - GET
+                - POST
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt VerifyUserLambda.Arn
+    VerifyUserLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref VerifyUserLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# ----------------- Verify Security Questions -----------------
+    VerifySecurityQuestionsLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "verifySecurityQuestions-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "verifySecurityQuestions.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    VerifySecurityQuestionsLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - GET
+                - POST
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt VerifySecurityQuestionsLambda.Arn
+    VerifySecurityQuestionsLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref VerifySecurityQuestionsLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+
+# ----------------- Verify Cipher Challenge --------------------
+    VerifyCipherChallengeLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "verifyCipherChallenge-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "verifyCipherChallenge.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    VerifyCipherChallengeLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - POST
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt VerifyCipherChallengeLambda.Arn
+    VerifyCipherChallengeLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref VerifyCipherChallengeLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# ---------------- User SignUp Lambda ------------------------
+
+    UserSignUpLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "userSignUp-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "userSignUp.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    UserSignUpLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - GET
+                - POST
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt UserSignUpLambda.Arn
+    UserSignUpLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref UserSignUpLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# --------------- 
+    
+    GetUserDetailsByIDLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "getUserDetailsByID-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "getUserDetailsByID.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    GetUserDetailsByIDLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt GetUserDetailsByIDLambda.Arn
+    GetUserDetailsByIDLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref GetUserDetailsByIDLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# --------------------- Get Security Questions -------------------
+    GetSecurityQuestionsLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "getSecurityQuestions-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "getSecurityQuestions.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    GetSecurityQuestionsLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - POST
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt GetSecurityQuestionsLambda.Arn
+    GetSecurityQuestionsLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref GetSecurityQuestionsLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# ------------------- Get Caesar Cipher -------------------
+    GetCaesarCipherLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "getCaesarCipher-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "getCaesarCipher.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    GetCaesarCipherLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - POST
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt GetCaesarCipherLambda.Arn
+    GetCaesarCipherLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref GetCaesarCipherLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+# ------------ Cognito User Pool ----------------------
+    CognitoUserPool:
+        Type: "AWS::Cognito::UserPool"
+        Properties:
+            UserPoolName: "DalHomeVacation-CFN"
+            Policies: 
+                PasswordPolicy: 
+                    MinimumLength: 8
+                    RequireUppercase: true
+                    RequireLowercase: true
+                    RequireNumbers: true
+                    RequireSymbols: true
+                    TemporaryPasswordValidityDays: 7
+            Schema: 
+              - 
+                Name: "preferred_username"
+                AttributeDataType: "String"
+                DeveloperOnlyAttribute: false
+                Mutable: true
+                Required: false
+                StringAttributeConstraints: 
+                    MinLength: "0"
+                    MaxLength: "2048"
+              - 
+                Name: "sub"
+                AttributeDataType: "String"
+                DeveloperOnlyAttribute: false
+                Mutable: false
+                Required: true
+                StringAttributeConstraints: 
+                    MinLength: "1"
+                    MaxLength: "2048"
+              - 
+                Name: "email"
+                AttributeDataType: "String"
+                DeveloperOnlyAttribute: false
+                Mutable: true
+                Required: true
+                StringAttributeConstraints: 
+                    MinLength: "0"
+                    MaxLength: "2048"
+
+            UsernameAttributes: 
+              - "email"
+            MfaConfiguration: "OFF"
+            EmailConfiguration: 
+                EmailSendingAccount: "COGNITO_DEFAULT"
+            AdminCreateUserConfig: 
+                AllowAdminCreateUserOnly: false
+            AccountRecoverySetting: 
+                RecoveryMechanisms: 
+                  - 
+                    Priority: 1
+                    Name: "verified_email"
+            UsernameConfiguration: 
+                CaseSensitive: false
+            VerificationMessageTemplate: 
+                DefaultEmailOption: "CONFIRM_WITH_CODE"
+
+    CognitoUserPoolClient:
+        Type: "AWS::Cognito::UserPoolClient"
+        Properties:
+            UserPoolId: !Ref CognitoUserPool
+            ClientName: "DalVacationHome-CFN"
+            RefreshTokenValidity: 30
+            ExplicitAuthFlows: 
+              - "ALLOW_REFRESH_TOKEN_AUTH"
+              - "ALLOW_USER_PASSWORD_AUTH"
+              - "ALLOW_USER_SRP_AUTH"
+            PreventUserExistenceErrors: "ENABLED"
+            AllowedOAuthFlowsUserPoolClient: false
+            IdTokenValidity: 60
+            AccessTokenValidity: 60
+            TokenValidityUnits: 
+                AccessToken: "minutes"
+                IdToken: "minutes"
+                RefreshToken: "days"
+
+#  ---------------- DynamoDb table ---------------------
+    DynamoDBTable:
+        Type: "AWS::DynamoDB::Table"
+        Properties:
+            AttributeDefinitions: 
+              - 
+                AttributeName: "userId"
+                AttributeType: "S"
+            TableName: "users-cfn"
+            KeySchema: 
+              - 
+                AttributeName: "userId"
+                KeyType: "HASH"
+            ProvisionedThroughput: 
+                ReadCapacityUnits: 1
+                WriteCapacityUnits: 1
+

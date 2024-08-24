@@ -1,0 +1,43 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+    VerifyUserLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "verifyUser-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "verifyUser.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            Environment:
+                Variables:
+                    USERPOOL_ID: !Ref CognitoUserPool # Cognito User Pool Id referenced 
+            EphemeralStorage: 
+                Size: 512
+    VerifyUserLambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - GET
+                - POST
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt VerifyUserLambda.Arn
+    VerifyUserLambdaPermission:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref VerifyUserLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'

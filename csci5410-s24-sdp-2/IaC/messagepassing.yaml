@@ -1,0 +1,72 @@
+resources:
+  # Pub/Sub topic for customer concerns
+  - type: pubsub.v1.topic
+    name: customerconcernIAX
+    properties:
+      topic: customerconcernIAC
+
+  # Function to publish customer concerns
+  - type: gcp-types/cloudfunctions-v1:projects.locations.functions
+    name: publishCustomerConcernIAC
+    properties:
+      parent: projects/csci5410-427115/locations/us-central1
+      function: publishCustomerConcernIAC
+      sourceArchiveUrl: gs://daldeployementb00968936/cloudF.zip
+      entryPoint: publishMessage
+      runtime: nodejs20
+      httpsTrigger: {}
+
+  # Function to subscribe and log messages
+  - type: gcp-types/cloudfunctions-v1:projects.locations.functions
+    name: subscribeAndLogIAC
+    properties:
+      parent: projects/csci5410-427115/locations/us-central1
+      function: subscribeAndLogIAC
+      sourceArchiveUrl: gs://daldeployementb00968936/cloudF2.zip
+      entryPoint: subscribeAndLog
+      runtime: nodejs20
+      httpsTrigger: {}
+
+  # Function to get agent response by booking reference
+  - type: gcp-types/cloudfunctions-v1:projects.locations.functions
+    name: agentResponseByBookingReferenceIAC
+    properties:
+      parent: projects/csci5410-427115/locations/us-central1
+      function: agentResponseByBookingReferenceIAC
+      sourceArchiveUrl: gs://daldeployementb00968936/agentResponseByBookingReference.zip
+      entryPoint: getAgentResponseByBookingReference
+      runtime: nodejs20
+      httpsTrigger: {}
+
+  # Function to get messages by agent
+  - type: gcp-types/cloudfunctions-v1:projects.locations.functions
+    name: getMessagesByAgentIAC
+    properties:
+      parent: projects/csci5410-427115/locations/us-central1
+      function: getMessagesByAgentIAC
+      sourceArchiveUrl: gs://daldeployementb00968936/getMessagesByAgent.zip
+      entryPoint: getMessagesByAgent
+      runtime: nodejs20
+      httpsTrigger: {}
+
+  # Function to get messages by booking reference
+  - type: gcp-types/cloudfunctions-v1:projects.locations.functions
+    name: getMessagesByBookingReferenceIAC
+    properties:
+      parent: projects/csci5410-427115/locations/us-central1
+      function: getMessagesByBookingReferenceIAC
+      sourceArchiveUrl: gs://daldeployementb00968936/getMessagesByBookingReference.zip
+      entryPoint: getMessageByBookingReference
+      runtime: nodejs20
+      httpsTrigger: {}
+
+  # Function to store messages
+  - type: gcp-types/cloudfunctions-v1:projects.locations.functions
+    name: storingMessagesIAC
+    properties:
+      parent: projects/csci5410-427115/locations/us-central1
+      function: storingMessagesIAC
+      sourceArchiveUrl: gs://daldeployementb00968936/storingMessages.zip
+      entryPoint: storingMessages
+      runtime: nodejs20
+      httpsTrigger: {}

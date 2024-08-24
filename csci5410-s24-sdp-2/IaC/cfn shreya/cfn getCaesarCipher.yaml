@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+    GetCaesarCipherLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "getCaesarCipher-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "getCaesarCipher.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    LambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - POST
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt GetCaesarCipherLambda.Arn
+    PermissionURLInvokeGetCaesarCipher:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref GetCaesarCipherLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'

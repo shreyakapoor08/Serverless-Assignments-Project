@@ -1,0 +1,95 @@
+{
+  "name": "RegisterNavigationIntent",
+  "identifier": "UNCJTOVAZU",
+  "description": null,
+  "parentIntentSignature": null,
+  "sampleUtterances": [
+    { "utterance": "How can I register?" },
+    { "utterance": "Where do I sign up?" },
+    { "utterance": "Help with registration." },
+    { "utterance": "I want to create a new account." },
+    { "utterance": "Can you guide me through the registration process?" },
+    { "utterance": "How to complete the registration?" },
+    { "utterance": "What steps are involved in signing up?" },
+    { "utterance": "Please help me understand how to register." },
+    { "utterance": "How do I get started with registration?" }
+  ],
+  "intentConfirmationSetting": null,
+  "intentClosingSetting": null,
+  "initialResponseSetting": {
+    "conditional": null,
+    "codeHook": {
+      "isActive": true,
+      "invocationLabel": null,
+      "postCodeHookSpecification": {
+        "failureResponse": null,
+        "failureNextStep": {
+          "sessionAttributes": null,
+          "dialogAction": {
+            "type": "EndConversation",
+            "slotToElicit": null,
+            "suppressNextMessage": null
+          },
+          "intent": { "name": null, "slots": null }
+        },
+        "failureConditional": null,
+        "successResponse": null,
+        "successNextStep": {
+          "sessionAttributes": null,
+          "dialogAction": {
+            "type": "EndConversation",
+            "slotToElicit": null,
+            "suppressNextMessage": null
+          },
+          "intent": { "name": null, "slots": null }
+        },
+        "successConditional": null,
+        "timeoutResponse": null,
+        "timeoutNextStep": {
+          "sessionAttributes": null,
+          "dialogAction": {
+            "type": "EndConversation",
+            "slotToElicit": null,
+            "suppressNextMessage": null
+          },
+          "intent": { "name": null, "slots": null }
+        },
+        "timeoutConditional": null
+      },
+      "enableCodeHookInvocation": true
+    },
+    "nextStep": {
+      "sessionAttributes": null,
+      "dialogAction": {
+        "type": "InvokeDialogCodeHook",
+        "slotToElicit": null,
+        "suppressNextMessage": null
+      },
+      "intent": { "name": null, "slots": null }
+    },
+    "initialResponse": {
+      "messageGroupsList": [
+        {
+          "message": {
+            "ssmlMessage": null,
+            "customPayload": null,
+            "plainTextMessage": {
+              "value": "To complete your registration, go to and fill out the required information. Once done, you'll receive a confirmation email."
+            },
+            "imageResponseCard": null
+          },
+          "variations": null
+        }
+      ],
+      "allowInterrupt": true
+    }
+  },
+  "inputContexts": null,
+  "outputContexts": null,
+  "kendraConfiguration": null,
+  "qnAIntentConfiguration": null,
+  "bedrockAgentIntentConfiguration": null,
+  "dialogCodeHook": null,
+  "fulfillmentCodeHook": null,
+  "slotPriorities": []
+}

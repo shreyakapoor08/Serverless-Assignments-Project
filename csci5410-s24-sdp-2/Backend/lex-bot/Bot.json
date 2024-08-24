@@ -1,0 +1,8 @@
+{
+  "name": "VacationHomeBot",
+  "version": "2",
+  "description": null,
+  "identifier": "QRL4TJLTIZ",
+  "dataPrivacy": { "childDirected": false },
+  "idleSessionTTLInSeconds": 300
+}

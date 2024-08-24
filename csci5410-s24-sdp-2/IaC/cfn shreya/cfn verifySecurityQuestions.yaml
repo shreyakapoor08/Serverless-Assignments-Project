@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+    VerifySecurityQuestionsLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "verifySecurityQuestions-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "verifySecurityQuestions.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    LambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Content-Type
+              AllowMethods: 
+                - GET
+                - POST
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt VerifySecurityQuestionsLambda.Arn
+    PermissionURLInvokeVerifySecurityQuestions:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref VerifySecurityQuestionsLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'

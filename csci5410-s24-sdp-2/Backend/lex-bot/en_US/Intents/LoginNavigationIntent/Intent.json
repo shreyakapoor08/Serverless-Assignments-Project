@@ -1,0 +1,56 @@
+{
+  "name": "LoginNavigationIntent",
+  "identifier": "KLM9IDOZYT",
+  "description": null,
+  "parentIntentSignature": null,
+  "sampleUtterances": [
+    { "utterance": "How do I log in?" },
+    { "utterance": "Where can I sign in?" },
+    { "utterance": "Help with login." },
+    { "utterance": "I forgot my password; what should I do?" },
+    { "utterance": "Logging into my account." },
+    { "utterance": "Can you guide me through the login process?" },
+    { "utterance": "Where do I go to access my account?" },
+    { "utterance": "I need help logging in." },
+    { "utterance": "Login assistance needed." }
+  ],
+  "intentConfirmationSetting": null,
+  "intentClosingSetting": null,
+  "initialResponseSetting": {
+    "conditional": null,
+    "codeHook": null,
+    "nextStep": {
+      "sessionAttributes": null,
+      "dialogAction": {
+        "type": "EndConversation",
+        "slotToElicit": null,
+        "suppressNextMessage": null
+      },
+      "intent": { "name": null, "slots": null }
+    },
+    "initialResponse": {
+      "messageGroupsList": [
+        {
+          "message": {
+            "ssmlMessage": null,
+            "customPayload": null,
+            "plainTextMessage": {
+              "value": "You can sign in using your registered email and password. Visit our login page to access your account."
+            },
+            "imageResponseCard": null
+          },
+          "variations": null
+        }
+      ],
+      "allowInterrupt": true
+    }
+  },
+  "inputContexts": null,
+  "outputContexts": null,
+  "kendraConfiguration": null,
+  "qnAIntentConfiguration": null,
+  "bedrockAgentIntentConfiguration": null,
+  "dialogCodeHook": null,
+  "fulfillmentCodeHook": null,
+  "slotPriorities": []
+}

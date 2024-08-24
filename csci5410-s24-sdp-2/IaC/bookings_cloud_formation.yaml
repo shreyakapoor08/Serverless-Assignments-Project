@@ -1,0 +1,1606 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: sdp2-room-images
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  BookingTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Booking
+
+  LoginTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Login
+
+  RegistrationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Registration
+
+  BookingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: BookingQueue
+
+  BookingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Bookings
+      AttributeDefinitions:
+        - AttributeName: bookingId
+          AttributeType: S
+        - AttributeName: roomId
+          AttributeType: S
+        - AttributeName: startDate
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: bookingId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: RoomIdIndex
+          KeySchema:
+            - AttributeName: roomId
+              KeyType: HASH
+            - AttributeName: startDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  RoomsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: Rooms
+      AttributeDefinitions:
+        - AttributeName: roomId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: roomId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+
+  UUIDLayer:
+    Type: 'AWS::Lambda::LayerVersion'
+    Properties:
+      LayerName: 'UUIDLayer'
+      Description: 'A layer for UUID utility functions'
+      Content:
+        S3Bucket: 'uuid-layer-2'
+        S3Key: 'uuid.zip'
+      CompatibleRuntimes:
+        - 'nodejs18.x'
+        - 'nodejs20.x'
+
+  sendRegistrationNotification:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sendRegistrationNotification
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { SNSClient, PublishCommand, SubscribeCommand  } from "@aws-sdk/client-sns";
+
+          const sns = new SNSClient({ region: "us-east-1" });
+
+          const topicArn = process.env.SNS_REG_ARN;
+          const bookingTopicArn = process.env.SNS_BOOKING_ARN;
+          const loginTopicArn = process.env.SNS_LOGIN_ARN;
+
+          export const handler = async(event) => {
+              const {userId, email} = JSON.parse(event.body);
+
+              if(!userId || !email){
+                  return {
+                      statusCode: 400,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Please pass all the fields"})
+                  };
+              }
+              const filterPolicy = {
+                  "UserId": [userId]
+                };
+
+              const registrationSubscribeParams = {
+                  TopicArn: topicArn,
+                  Protocol: 'email',
+                  Endpoint: email,
+                  Attributes: {
+                    'FilterPolicy': JSON.stringify(filterPolicy)
+                  }
+              };
+
+              const bookingSubscribeParams = {
+                  TopicArn: bookingTopicArn,
+                  Protocol: 'email',
+                  Endpoint: email,
+                  Attributes: {
+                    'FilterPolicy': JSON.stringify(filterPolicy)
+                  }
+              };
+
+              const loginSubscribeParams = {
+                  TopicArn: loginTopicArn,
+                  Protocol: 'email',
+                  Endpoint: email,
+                  Attributes: {
+                    'FilterPolicy': JSON.stringify(filterPolicy)
+                  }
+              };
+
+              const subject = "Welcome to DalVacationHome!";
+              const message = `Hello User,
+              
+              We're excited to have you join us at DalVacationHome!
+              Your registration was successful, and you’re now part of our community. Here’s what you can do next:
+              - Explore Our Home: Discover our available rooms.
+              - Booking & Queries: Choose your rooms and book it.
+              - Virtual Chatbot Support: Our chatbot can assist with queries regarding your booking.
+              - Get Support: Our team is here to assist you whenever you need help.
+
+              Need help getting started? Reach out to our support team.
+              Thank you for joining us. We’re thrilled to have you!
+              `
+
+              try{
+                  const registrationSubscribeCommand = new SubscribeCommand(registrationSubscribeParams);
+                  const loginSubscribeCommand = new SubscribeCommand(loginSubscribeParams);
+                  const bookingSubscribeCommand = new SubscribeCommand(bookingSubscribeParams);
+                  //TODO: Uncomment this if you need to subscribe new emails for registration from code
+                  //await sns.send(registrationSubscribeCommand);
+                  await sns.send(loginSubscribeCommand);
+                  await sns.send(bookingSubscribeCommand);
+
+                  await sns.send(new PublishCommand({
+                      Message: message,
+                      Subject: subject,
+                      MessageAttributes: {
+                          UserId: {
+                              DataType: 'String',
+                              StringValue: userId,
+                              },
+                          },
+                      TopicArn: topicArn
+                    }));
+                
+
+                  return {
+                      statusCode: 201,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Email sent successfully!", details: message})
+                  };
+              }
+              catch(error) {
+                  console.error(error);
+                  return {
+                      statusCode: 500,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Failed to send email."})
+                  };
+              }
+              
+
+          };
+      Environment:
+        Variables:
+          SNS_REG_ARN: !Ref RegistrationTopic
+          SNS_LOGIN_ARN: !Ref LoginTopic
+          SNS_BOOKING_ARN: !Ref BookingTopic
+
+  sendLoginNotification:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sendLoginNotification
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { SNSClient, PublishCommand  } from "@aws-sdk/client-sns";
+          const sns = new SNSClient({ region: "us-east-1" });
+          const topicArn = process.env.SNS_LOGIN_ARN;
+          export const handler = async(event) => {
+              const {userId, email} = JSON.parse(event.body);
+              if(!userId || !email){
+                  return {
+                      statusCode: 400,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Please pass all the fields"})
+                  };
+              }
+              const subject = "Welcome to DalVacationHome!";
+              const currentDate = new Date();
+              const message = `Hello User,
+              You have recently logged in to DalVacationHome at ${currentDate}.
+              `;
+              try{
+                  await sns.send(new PublishCommand({
+                      Message: message,
+                      Subject: subject,
+                      MessageAttributes: {
+                          UserId: {
+                              DataType: 'String',
+                              StringValue: userId,
+                              },
+                          },
+                      TopicArn: topicArn
+                    }));
+                  return {
+                      statusCode: 201,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Email sent successfully!", details: message})
+                  };
+              }
+              catch(error) {
+                  console.error(error);
+                  return {
+                      statusCode: 500,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Failed to send email."})
+                  };
+              }
+          };
+      Environment:
+        Variables:
+          SNS_LOGIN_ARN: !Ref LoginTopic
+
+  roomManagement:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: roomManagement
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { DynamoDBClient, ScanCommand, GetItemCommand , PutItemCommand, UpdateItemCommand, DeleteItemCommand } from "@aws-sdk/client-dynamodb";
+          import { randomUUID } from 'crypto';
+          const client = new DynamoDBClient({ region: "us-east-1" });
+          const headers = {
+              "Access-Control-Allow-Headers": "Content-Type",
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "OPTIONS,GET,POST,PUT,DELETE"
+          };
+          const tableName = "Rooms";
+          export const handler = async (event) => {
+              const body = event.body ? JSON.parse(event.body) : {};
+              const roomId = event.queryStringParameters ? event.queryStringParameters.roomId : null;
+              switch (event.httpMethod) {
+                  case "GET":
+                      return await roomId ? getRoomDetails(roomId) : getAllRooms();
+                  case "POST":
+                      return await addRoom(body);
+                  case "PUT":
+                      return await editRoom(body);
+                  case "DELETE":
+                      return await deleteRoom(roomId);
+                  default:
+                      return {
+                          statusCode: 400,
+                          headers: headers,
+                          body: JSON.stringify({ message: "Unsupported method" })
+                      };
+              }
+          };
+          const getAllRooms = async () => {
+              try {
+                  const command = new ScanCommand({ TableName: tableName });
+                  const data = await client.send(command);
+                  return {
+                      statusCode: 200,
+                      headers: headers,
+                      body: JSON.stringify(data.Items)
+                  };
+              } catch (error) {
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: headers,
+                      body: JSON.stringify({ message: error.message })
+                  };
+              }
+          };
+          const getRoomDetails = async (roomId) => {
+              try {
+                  const command = new GetItemCommand({
+                      TableName: tableName,
+                      Key: {
+                          roomId: { S: roomId }
+                      }
+                  });
+                  const data = await client.send(command);
+                  return {
+                      statusCode: 200,
+                      headers: headers,
+                      body: JSON.stringify(data.Item)
+                  };
+              } catch (error) {
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: headers,
+                      body: JSON.stringify({ message: error.message })
+                  };
+              }
+          };
+          const addRoom = async (body) => {
+              try {
+                  const { name, description, image, price, discount } = body;
+                  const roomId = randomUUID();
+                  const command = new PutItemCommand({
+                      TableName: tableName,
+                      Item: {
+                          roomId: { S: roomId },
+                          name: {S: name},
+                          description: {S: description},
+                          image: {S: image},
+                          price: { N: price.toString() },
+                          discount: { N: discount.toString() }
+                      }
+                  });
+                  await client.send(command);
+                  return {
+                      statusCode: 201,
+                      headers: headers,
+                      body: JSON.stringify({ message: "Room added successfully" })
+                  };
+              } catch (error) {
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: headers,
+                      body: JSON.stringify({ message: error.message })
+                  };
+              }
+          };
+          const editRoom = async (body) => {
+              try {
+                  const { roomId, name, description, image, price, discount } = body;
+                  const command = new UpdateItemCommand({
+                      TableName: tableName,
+                      Key: {
+                          roomId: { S: roomId }
+                      },
+                      UpdateExpression: "set #name = :name, #description = :description, #image = :image, #price = :price, #discount = :discount",
+                      ExpressionAttributeNames: {
+                          "#name": "name",
+                          "#description": "description",
+                          "#image": "image",
+                          "#price": "price",
+                          "#discount": "discount"
+                      },
+                      ExpressionAttributeValues: {
+                          ":name": { S: name },
+                          ":description": { S: description },
+                          ":image": { S: image },
+                          ":price": { N: price.toString() },
+                          ":discount": { N: discount.toString() }
+                      }
+                  });
+                  await client.send(command);
+                  return {
+                      statusCode: 200,
+                      headers: headers,
+                      body: JSON.stringify({ message: "Room updated successfully" })
+                  };
+              } catch (error) {
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: headers,
+                      body: JSON.stringify({ message: error.message })
+                  };
+              }
+          };
+          const deleteRoom = async (roomId) => {
+              if (!roomId) {
+                  return {
+                      statusCode: 400,
+                      headers: headers,
+                      body: JSON.stringify({ message: "Missing roomId parameter" })
+                  };
+              }
+              try {
+                  const command = new DeleteItemCommand({
+                      TableName: tableName,
+                      Key: {
+                          roomId: { S: roomId }
+                      }
+                  });
+                  await client.send(command);
+                  return {
+                      statusCode: 200,
+                      headers: headers,
+                      body: JSON.stringify({ message: "Room deleted successfully" })
+                  };
+              } catch (error) {
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: headers,
+                      body: JSON.stringify({ message: error.message })
+                  };
+              }
+          };
+
+  uploadRoomImage:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: uploadRoomImage
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+          const client = new S3Client({ region: "us-east-1" });
+          const headers = {
+              "Access-Control-Allow-Headers": "Content-Type",
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "OPTIONS,POST"
+          };
+          const bucketName = "sdp2-room-images";
+          export const handler = async (event) => {
+              const body = event.body ? JSON.parse(event.body) : {};
+              if (!body.image || !body.key) {
+                  return {
+                      statusCode: 400,
+                      headers: headers,
+                      body: JSON.stringify({ message: "Missing required parameters" })
+                  };
+              }
+              let { image, key } = body;
+              const extension = key.split('.').pop().toLowerCase();
+              let contentType = 'application/octet-stream';
+              switch (extension) {
+                  case 'jpg':
+                  case 'jpeg':
+                      contentType = 'image/jpeg';
+                      key = key;
+                      break;
+                  case 'png':
+                      contentType = 'image/png';
+                      key = key;
+                      break;
+                  case 'gif':
+                      contentType = 'image/gif';
+                      key = key;
+                      break;
+                  default:
+                      contentType = 'application/octet-stream';
+              }
+              try {
+                  const buffer = Buffer.from(image, 'base64');
+                  const command = new PutObjectCommand({
+                      Bucket: bucketName,
+                      Key: key,
+                      Body: buffer,
+                      ContentEncoding: 'base64',
+                      ContentType: contentType,
+                      ACL: 'public-read'
+                  });
+                  await client.send(command);
+                  const objectUrl = `https://${bucketName}.s3.amazonaws.com/${key}`;
+                  return {
+                      statusCode: 200,
+                      headers: headers,
+                      body: JSON.stringify({ message: "Image uploaded successfully", url: objectUrl })
+                  };
+              } catch (error) {
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: headers,
+                      body: JSON.stringify({ message: error.message })
+                  };
+              }
+          };
+
+  getAllBookings:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: getAllBookings
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+          import { fromEnv } from "@aws-sdk/credential-providers";
+          import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+          const dynamoDb = new DynamoDBClient({ region: "us-east-1", credentials: fromEnv() });
+          export const handler = async(event) => {
+              if (event.httpMethod === 'OPTIONS') {
+                  return {
+                      statusCode: 200,
+                      headers: {
+                          "Access-Control-Allow-Headers": "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: ''
+                  };
+              }
+              const body = JSON.parse(event.body);
+              const userId = body.userId;
+              if (!userId) {
+                  return {
+                      statusCode: 400,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({ message: "userId is required" })
+                  };
+              }
+              const params = {
+                  TableName: 'Bookings',
+                  IndexName: 'UserIdIndex',
+                  KeyConditionExpression: "userId = :userId",
+                  ExpressionAttributeValues: {
+                      ":userId": userId
+                  }
+              };
+              try{
+                  const data = await dynamoDb.send(new QueryCommand(params));
+                  return {
+                      statusCode: 200,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Successfully retrieved bookings", bookings: data.Items})
+                  }
+              }
+              catch(error){
+                  console.log(error);
+                  return {
+                      statusCode: 500,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({message: "Could not retrieve bookings"})
+                  };
+              }
+          }
+
+  getBookingDetails:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: getBookingDetails
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { DynamoDBClient, GetItemCommand } from "@aws-sdk/client-dynamodb";
+          import { fromEnv } from "@aws-sdk/credential-providers";
+          const dynamoDb = new DynamoDBClient({ region: "us-east-1", credentials: fromEnv() });
+          export const handler = async(event) => {
+              const bookingId = event.queryStringParameters.bookingId;
+              if(!bookingId){
+                  return {
+                      statusCode:400,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
+                      },
+                      body: JSON.stringify({message: "Booking ID is required"})
+                  }
+              }
+              const params = {
+                  TableName: 'Bookings',
+                  Key: {
+                      bookingId: { S: bookingId },
+                  }
+              };
+              try{
+                  const { Item } = await dynamoDb.send(new GetItemCommand(params));
+                  if(!Item){
+                      return {
+                          statusCode: 404,
+                          body: JSON.stringify({message:"Booking not found"})
+                      }
+                  }
+                  const bookingDetails = {
+                      bookingId: Item.bookingId.S,
+                      userId: Item.userId.S,
+                      roomId: Item.roomId.S,
+                      roomName: Item.roomName.S,
+                      startDate: Item.startDate.S,
+                      endDate: Item.endDate.S,
+                      status: Item.status.S,
+                    };
+                  return {
+                      statusCode: 200,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
+                      },
+                      body: JSON.stringify({message: "Booking found", details: bookingDetails})
+                  }
+              }
+              catch(error){
+                  console.error(error);
+                  return {
+                      statusCode: 500,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST,GET"
+                      },
+                      body: JSON.stringify({message: 'Error while retrieving the booking details.'})
+                  };
+              }
+          }
+
+  bookRoom:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: bookRoom
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { DynamoDBClient, PutItemCommand, QueryCommand } from "@aws-sdk/client-dynamodb";
+          import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+          const dynamoDb = new DynamoDBClient({ region: "us-east-1" });
+          const sns = new SNSClient({ region: "us-east-1" });
+          function formatDate(isoDateString) {
+              const date = new Date(isoDateString);
+              return date.toLocaleString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: 'numeric',
+                second: 'numeric',
+                timeZoneName: 'short'
+              });
+          }
+          export const handler = async (event) => {
+              for (const record of event.Records) {
+                  let body;
+                  try {
+                      body = JSON.parse(record.body);
+                  } catch (error) {
+                      console.error("Invalid JSON format:", record.body);
+                      continue;
+                  }
+                  const { userId, roomId, roomName, startDate, endDate } = body;
+                  if (!userId || !roomId || !roomName || !startDate || !endDate) {
+                      console.error("Missing required fields:", body);
+                      continue;
+                  }
+                  const start = new Date(startDate).toISOString();
+                  const end = new Date(endDate).toISOString();
+                  const queryParams = {
+                      TableName: 'Bookings',
+                      IndexName: 'RoomIdIndex',
+                      KeyConditionExpression: 'roomId = :roomId',
+                      ExpressionAttributeValues: {
+                          ':roomId': { S: roomId }
+                      }
+                  };
+                  try {
+                      const currentBookings = await dynamoDb.send(new QueryCommand(queryParams));
+                      const isRoomAvailable = currentBookings.Items.every((item) => {
+                          const itemStartDate = new Date(item.startDate.S);
+                          const itemEndDate = new Date(item.endDate.S);
+                          return !(start <= itemEndDate.toISOString() && end >= itemStartDate.toISOString());
+                      });
+                      if (!isRoomAvailable) {
+                          console.error("Room already booked:", roomId);
+                          throw new Error("Room already booked.");
+                      }
+                      const bookingId = generateId();
+                      const bookingParams = {
+                          TableName: 'Bookings',
+                          Item: {
+                              bookingId: { S: bookingId },
+                              userId: { S: userId },
+                              roomId: { S: roomId },
+                              roomName: { S: roomName },
+                              startDate: { S: start },
+                              endDate: { S: end },
+                              status: { S: 'Booked' }
+                          }
+                      };
+                      await dynamoDb.send(new PutItemCommand(bookingParams));
+                      const subject = "Room booked successfully";
+                      const message = `
+                          Dear User,
+                          We are pleased to confirm you booking for ${roomName}  at DalVacationHome.
+                          Below are the details of your booking:
+                          Booking id: ${bookingId}
+                          Room name: ${roomName}
+                          Checkin date: ${formatDate(startDate)}
+                          Checkout date: ${formatDate(endDate)}
+                      `;
+                      await sns.send(new PublishCommand({
+                          Subject: subject,
+                          Message: message,
+                          TopicArn: process.env.SNS_BOOKING_ARN,
+                          MessageAttributes: {
+                          UserId: {
+                              DataType: 'String',
+                              StringValue: userId,
+                              },
+                          },
+                      }));
+                      console.log("Room booked successfully:", message);
+                  } catch (error) {
+                      const subject = "Room booking failed";
+                      const message = `Sorry to inform you, but your booking for room ${roomName} could not be completed`;
+                      await sns.send(new PublishCommand({
+                          Subject: subject,
+                          Message: message,
+                          TopicArn: process.env.SNS_BOOKING_ARN,
+                          MessageAttributes: {
+                              UserId: {
+                                  DataType: 'String',
+                                  StringValue: userId,
+                                  },
+                              },
+                        }));
+                      console.error("Error processing booking:", error);
+                  }
+              }
+              return {
+                  statusCode: 200,
+                  body: JSON.stringify({ message: "Processing complete" }),
+              };
+          };
+          function generateId() {
+              const idLength = 6;
+              const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+              let id = '';
+              for (let i = 0; i < idLength; i++) {
+                  id += chars.charAt(Math.floor(Math.random() * chars.length));
+              }
+              return id;
+          }
+      Layers:
+        - !Ref UUIDLayer
+      Environment:
+        Variables:
+          SNS_BOOKING_ARN: !Ref BookingTopic
+
+  #Event Source Mapping
+  SQSQueueEventSourceMapping:
+    Type: 'AWS::Lambda::EventSourceMapping'
+    Properties:
+      EventSourceArn: !GetAtt BookingQueue.Arn
+      FunctionName: !Ref bookRoom
+      Enabled: true
+      BatchSize: 1
+
+  deleteBooking:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: deleteBooking
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+          import { DeleteCommand } from "@aws-sdk/lib-dynamodb";
+          import { fromEnv } from "@aws-sdk/credential-providers";
+          const dynamoDb = new DynamoDBClient({ region: "us-east-1", credentials: fromEnv() });
+          export const handler = async(event)=>{
+              const body = event.body ? JSON.parse(event.body) : null;
+              let userId, bookingId;
+              if (body) {
+                  userId = body.userId;
+                  bookingId = body.bookingId;
+              }
+              if (!userId || !bookingId) {
+                  console.log("event:"+ event.body+ "body:"+ body);
+                  return {
+                      statusCode: 400,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({ message: "userId and bookingId are required" })
+                  };
+              }
+              const params = {
+                  TableName: "Bookings",
+                  Key: {
+                      bookingId: bookingId
+                  }
+              }
+              try {
+                  await dynamoDb.send(new DeleteCommand(params));
+                  return {
+                    statusCode: 200,
+                    headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                    body: JSON.stringify({ message: "Booking deleted successfully"}),
+                  };
+              }
+              catch (error) {
+                  console.log(error);
+                  return {
+                    statusCode: 500,
+                    headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                    body: JSON.stringify({ message: "Could not delete booking" }),
+                  };
+              }
+          };
+
+  sendBooking:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: sendBooking
+      Handler: index.handler
+      Role: !Sub 'arn:aws:iam::${AWS::AccountId}:role/LabRole'
+      Runtime: nodejs20.x
+      Code:
+        ZipFile: |
+          import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
+          const sqs = new SQSClient({ region: "us-east-1" });
+          export const handler = async (event) => {
+              const { userId, roomId, roomName, startDate, endDate } = JSON.parse(event.body);
+              if (!userId || !roomId || !roomName || !startDate || !endDate) {
+                  return {
+                      statusCode: 400,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({ message: "Please provide all required fields" })
+                  };
+              }
+              const message = {
+                  userId,
+                  roomId,
+                  roomName,
+                  startDate,
+                  endDate,
+              };
+              const queueUrl = process.env.SQS_QUEUE_URL;
+              const params = {
+                  QueueUrl: queueUrl,
+                  MessageBody: JSON.stringify(message),
+              };
+              try {
+                  await sqs.send(new SendMessageCommand(params));
+                  return {
+                      statusCode: 200,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({ message: "Booking request added to SQS queue" })
+                  };
+              } catch (error) {
+                  console.error('Error adding message to SQS queue:', error);
+                  return {
+                      statusCode: 500,
+                      headers: {
+                          "Access-Control-Allow-Headers" : "Content-Type",
+                          "Access-Control-Allow-Origin": "*",
+                          "Access-Control-Allow-Methods": "OPTIONS,POST"
+                      },
+                      body: JSON.stringify({ message: 'Failed to add booking request to SQS queue' })
+                  };
+              }
+          };
+      Environment:
+          Variables:
+            SQS_QUEUE_URL: !Ref BookingQueue
+
+  APIGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: DalVacationHome
+      Description: API Gateway for DalVacationHome
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  BookingsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt APIGateway.RootResourceId
+      PathPart: bookings
+      RestApiId: !Ref APIGateway
+  
+  DeleteBookingResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Ref BookingsResource
+      PathPart: 'deleteBooking'
+      RestApiId: !Ref APIGateway
+
+  GetBookingDetailsResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Ref BookingsResource
+      PathPart: 'getBookingDetails'
+      RestApiId: !Ref APIGateway
+
+  GetBookingsResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Ref BookingsResource
+      PathPart: 'getBookings'
+      RestApiId: !Ref APIGateway
+
+  SendBookingResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Ref BookingsResource
+      PathPart: 'sendBooking'
+      RestApiId: !Ref APIGateway
+
+  DeleteBookingOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref DeleteBookingResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  DeleteBookingMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref DeleteBookingResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${deleteBooking.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  GetBookingOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref GetBookingDetailsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  GetBookingDetailsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      ResourceId: !Ref GetBookingDetailsResource
+      RestApiId: !Ref APIGateway
+      RequestParameters:
+        method.request.querystring.bookingId: true
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getBookingDetails.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  GetAllBookingsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref GetBookingsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  GetAllBookingsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref GetBookingsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${getAllBookings.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  SendBookingOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref SendBookingResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  SendBookingMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref SendBookingResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sendBooking.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  NotificationsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt APIGateway.RootResourceId
+      PathPart: notifications
+      RestApiId: !Ref APIGateway
+  
+  SendRegistrationNotificationResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Ref NotificationsResource
+      PathPart: 'registration'
+      RestApiId: !Ref APIGateway
+
+  SendLoginNotificationResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      ParentId: !Ref NotificationsResource
+      PathPart: 'login'
+      RestApiId: !Ref APIGateway
+
+  LoginOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref SendLoginNotificationResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  LoginMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref SendLoginNotificationResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sendLoginNotification.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  RegistrationOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref SendRegistrationNotificationResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  RegistrationMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref SendRegistrationNotificationResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${sendRegistrationNotification.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  RoomsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt APIGateway.RootResourceId
+      PathPart: rooms
+      RestApiId: !Ref APIGateway
+
+  RoomsOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref RoomsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  RoomsMethods:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: GET
+      ResourceId: !Ref RoomsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${roomManagement.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  RoomsMethodsPOST:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref RoomsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${roomManagement.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  RoomsMethodsPUT:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: PUT
+      ResourceId: !Ref RoomsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${roomManagement.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  RoomsMethodsDELETE:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: DELETE
+      ResourceId: !Ref RoomsResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${roomManagement.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  RoomImageResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref RoomsResource
+      PathPart: image
+      RestApiId: !Ref APIGateway
+  
+  RoomImageOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      ResourceId: !Ref RoomImageResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        Type: MOCK
+        PassthroughBehavior: WHEN_NO_MATCH
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Origin: true
+
+  UploadRoomImageMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      ResourceId: !Ref RoomImageResource
+      RestApiId: !Ref APIGateway
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${uploadRoomImage.Arn}/invocations
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: "Empty"
+          ResponseParameters:
+            "method.response.header.Access-Control-Allow-Headers": true
+            "method.response.header.Access-Control-Allow-Methods": true
+            "method.response.header.Access-Control-Allow-Origin": true
+
+  #Lambda permissions
+  DeleteBookingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt deleteBooking.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  GetBookingDetailsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt getBookingDetails.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  GetAllBookingsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt getAllBookings.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  SendBookingPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt sendBooking.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  LoginMethodPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt sendLoginNotification.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  RegistrationMethodPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt sendRegistrationNotification.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  RoomsMethodsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt roomManagement.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  RoomsMethodsPOSTPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt roomManagement.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  RoomsMethodsPUTPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt roomManagement.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  RoomsMethodsDELETEPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt roomManagement.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  UploadRoomImageMethodPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt uploadRoomImage.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
+
+  APIDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref APIGateway
+      StageName: prod
+    DependsOn:
+      - DeleteBookingMethod
+      - GetBookingDetailsMethod
+      - GetAllBookingsMethod
+      - SendBookingMethod
+      - LoginMethod
+      - RegistrationMethod
+      - RoomsMethods
+      - RoomsMethodsPOST
+      - RoomsMethodsPUT
+      - RoomsMethodsDELETE
+      - UploadRoomImageMethod

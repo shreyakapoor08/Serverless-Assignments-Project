@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+    GetAllUsersLambda:
+        Type: "AWS::Lambda::Function"
+        Properties:
+            FunctionName: "getAllUsers-CFN"
+            Handler: "lambda_function.lambda_handler"
+            Architectures: 
+              - "x86_64"
+            Code: 
+                S3Bucket: "dalvacationhomeassets"
+                S3Key: "getAllUsers.zip"
+            MemorySize: 128
+            Role: !Sub "arn:aws:iam::${AWS::AccountId}:role/LabRole"
+            Runtime: "python3.12"
+            Timeout: 3
+            EphemeralStorage: 
+                Size: 512
+    LambdaURL:
+        Type: AWS::Lambda::Url
+        Properties:
+          AuthType: NONE
+          Cors: 
+              AllowCredentials: false
+              AllowHeaders: 
+                - Authorization
+                - Content-Type
+              AllowMethods: 
+                - GET
+              AllowOrigins: 
+                - "*"
+          InvokeMode: BUFFERED
+          TargetFunctionArn: !GetAtt GetAllUsersLambda.Arn
+    PermissionURLInvokeGetAllUsers:
+        Type: AWS::Lambda::Permission
+        Properties:
+          FunctionName: !Ref GetAllUsersLambda
+          FunctionUrlAuthType: 'NONE'
+          Action: lambda:InvokeFunctionUrl
+          Principal: '*'
+
+    CognitoUserPool:
+        Type: "AWS::Cognito::UserPool"
+        Properties:
+            UserPoolName: "DalHomeVacation-CFN"
+            Policies: 
+                PasswordPolicy: 
+                    MinimumLength: 8
+                    RequireUppercase: true
+                    RequireLowercase: true
+                    RequireNumbers: true
+                    RequireSymbols: true
+                    TemporaryPasswordValidityDays: 7
+            Schema: 
+              - 
+                Name: "preferred_username"
+                AttributeDataType: "String"
+                DeveloperOnlyAttribute: false
+                Mutable: true
+                Required: false
+                StringAttributeConstraints: 
+                    MinLength: "0"
+                    MaxLength: "2048"
+              - 
+                Name: "sub"
+                AttributeDataType: "String"
+                DeveloperOnlyAttribute: false
+                Mutable: false
+                Required: true
+                StringAttributeConstraints: 
+                    MinLength: "1"
+                    MaxLength: "2048"
+              - 
+                Name: "email"
+                AttributeDataType: "String"
+                DeveloperOnlyAttribute: false
+                Mutable: true
+                Required: true
+                StringAttributeConstraints: 
+                    MinLength: "0"
+                    MaxLength: "2048"
+
+            UsernameAttributes: 
+              - "email"
+            MfaConfiguration: "OFF"
+            EmailConfiguration: 
+                EmailSendingAccount: "COGNITO_DEFAULT"
+            AdminCreateUserConfig: 
+                AllowAdminCreateUserOnly: false
+            AccountRecoverySetting: 
+                RecoveryMechanisms: 
+                  - 
+                    Priority: 1
+                    Name: "verified_email"
+            UsernameConfiguration: 
+                CaseSensitive: false
+            VerificationMessageTemplate: 
+                DefaultEmailOption: "CONFIRM_WITH_CODE"
+
+    DynamoDBTable:
+        Type: "AWS::DynamoDB::Table"
+        Properties:
+            AttributeDefinitions: 
+              - 
+                AttributeName: "userId"
+                AttributeType: "S"
+            TableName: "users-cfn"
+            KeySchema: 
+              - 
+                AttributeName: "userId"
+                KeyType: "HASH"
+            ProvisionedThroughput: 
+                ReadCapacityUnits: 1
+                WriteCapacityUnits: 1
+
+    CognitoUserPoolClient:
+        Type: "AWS::Cognito::UserPoolClient"
+        Properties:
+            UserPoolId: !Ref CognitoUserPool
+            ClientName: "DalVacationHome-CFN"
+            RefreshTokenValidity: 30
+            ExplicitAuthFlows: 
+              - "ALLOW_REFRESH_TOKEN_AUTH"
+              - "ALLOW_USER_PASSWORD_AUTH"
+              - "ALLOW_USER_SRP_AUTH"
+            PreventUserExistenceErrors: "ENABLED"
+            AllowedOAuthFlowsUserPoolClient: false
+            IdTokenValidity: 60
+            AccessTokenValidity: 60
+            TokenValidityUnits: 
+                AccessToken: "minutes"
+                IdToken: "minutes"
+                RefreshToken: "days"

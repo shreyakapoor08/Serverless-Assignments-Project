@@ -1,0 +1,32 @@
+steps:
+  # Cloud build container 1
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/${PROJECT_ID}/dal-vac-repo/dalvacationhome:latest', '.']
+  
+  # Cloud push container 1
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/${PROJECT_ID}/dal-vac-repo/dalvacationhome:latest']
+  
+  
+  # Deploy the container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'dal-vacation-home'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/dal-vac-repo/dalvacationhome:latest'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '4Gi'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/${PROJECT_ID}/dal-vac-repo/dalvacationhome:latest'
